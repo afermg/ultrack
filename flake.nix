@@ -71,6 +71,10 @@
             ]);
             runServer = pkgs.writeScriptBin "runserver.sh" ''
               #!${pkgs.bash}/bin/bash
+              # PYTHONSAFEPATH=1 (Python 3.11+) keeps Python from prepending
+              # the script's directory to sys.path so the in-tree `ultrack/`
+              # source tree never shadows the nix-built package.
+              export PYTHONSAFEPATH=1
               ${python_with_pkgs}/bin/python ${self}/server.py ''${@:-"ipc:///tmp/ultrack.ipc"}
             '';
           in
@@ -97,7 +101,11 @@
                 pkgs.cudaPackages.cudatoolkit
               ];
               shellHook = ''
-                export PYTHONPATH=${python_with_pkgs}/${python_with_pkgs.sitePackages}:$PYTHONPATH
+                # PYTHONSAFEPATH=1 (Python 3.11+) keeps Python from prepending
+                # the script's directory to sys.path so `python basic_test.py`
+                # never picks up the in-tree `ultrack/` source tree instead of
+                # the nix-built package.
+                export PYTHONSAFEPATH=1
               '';
             };
         };

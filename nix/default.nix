@@ -2,6 +2,7 @@
   lib,
   pkgs,
   python3Packages,
+  nahualSrc,
 }:
 let
   # Order matters: our package set (`packages`) wins over `python3Packages`
@@ -15,7 +16,9 @@ let
     numcodecs = callPackage ./numcodecs.nix { };
     zarr = callPackage ./zarr.nix { };
     pynng = callPackage ./pynng.nix { };
-    nahual = callPackage ./nahual.nix { };
+    # nahual recipe sourced from upstream flake input; built against our
+    # local python3.13 so it uses the same zarr / numcodecs override scope.
+    nahual = callPackage (nahualSrc + "/nix/nahual.nix") { };
     ultrack = callPackage ./ultrack.nix { };
   };
 in

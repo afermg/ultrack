@@ -7,6 +7,7 @@
     systems.url = "github:nix-systems/default";
     flake-utils.url = "github:numtide/flake-utils";
     flake-utils.inputs.systems.follows = "systems";
+    nahual-flake.url = "github:afermg/nahual";
   };
 
   outputs =
@@ -51,6 +52,7 @@
 
         ourPackages = pkgs.callPackage ./nix {
           python3Packages = python.pkgs;
+          nahualSrc = inputs.nahual-flake;
         };
       in
       with pkgs;

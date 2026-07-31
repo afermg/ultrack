@@ -39,7 +39,7 @@ from nahual.server import responder
 address = sys.argv[1]
 
 
-def _make_config(device: int | None, ultrack_config: dict[str, Any]):
+def _make_config(device: int | str | None, ultrack_config: dict[str, Any]):
     """Build a MainConfig from a nested-dict overrides spec.
 
     Accepts the canonical ultrack TOML layout, e.g.
@@ -75,7 +75,7 @@ def _make_config(device: int | None, ultrack_config: dict[str, Any]):
 
 
 def setup(
-    device: int | None = None,
+    device: int | str | None = None,
     working_dir: str | None = None,
     overwrite: bool = True,
     sigma: float | None = None,
@@ -88,9 +88,9 @@ def setup(
 
     Parameters
     ----------
-    device : int | None
-        Preferred GPU index for torch / cupy ops. Falls back to CPU when CUDA
-        is unavailable.
+    device : int | str | None
+        Preferred GPU index or torch device string for optional accelerated
+        operations. ``None`` selects CUDA when available and otherwise CPU.
     working_dir : str | None
         Base directory for ultrack's SQLite database + intermediate zarrs.
         A fresh tempdir is created per request when None.
@@ -106,13 +106,16 @@ def setup(
         `linking`, `tracking`). See `_make_config`.
     """
     if device is None:
-        device = 0
-    if torch.cuda.is_available():
-        torch_device = torch.device(int(device))
-        device_str = f"cuda:{int(device)}"
+        torch_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    elif isinstance(device, int):
+        torch_device = torch.device(f"cuda:{device}")
     else:
-        torch_device = torch.device("cpu")
-        device_str = "cpu"
+        torch_device = torch.device(device)
+    if torch_device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            f"CUDA device {torch_device} was requested but CUDA is unavailable"
+        )
+    device_str = str(torch_device)
 
     base_config = _make_config(device, ultrack_config)
     if working_dir is not None:
@@ -163,9 +166,7 @@ def process(
     from ultrack.core.export.tracks_layer import to_tracks_layer
 
     if pixels.ndim != 5:
-        raise ValueError(
-            f"Expected 5-D NCZYX input, got shape {pixels.shape}"
-        )
+        raise ValueError(f"Expected 5-D NCZYX input, got shape {pixels.shape}")
     n_t, n_c, n_z, n_y, n_x = pixels.shape
     if n_c != 2:
         raise ValueError(
@@ -182,7 +183,8 @@ def process(
     # calls doesn't contaminate this one. The dict-driven `working_dir` from
     # setup() takes precedence when supplied.
     using_tempdir = False
-    if config.data_config.working_dir in (None, ".", ""):
+    original_working_dir = config.data_config.working_dir
+    if original_working_dir in (None, ".", ""):
         tmp = tempfile.mkdtemp(prefix="ultrack_run_")
         config.data_config.working_dir = tmp
         using_tempdir = True
@@ -204,7 +206,9 @@ def process(
     finally:
         if using_tempdir:
             import shutil
+
             shutil.rmtree(config.data_config.working_dir, ignore_errors=True)
+            config.data_config.working_dir = original_working_dir
 
     return result
 
